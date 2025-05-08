@@ -324,7 +324,9 @@ N8N_ENCRYPTION_KEY=una_clave_segura_de_al_menos_32_caracteres
 
 ### **Configuración de servicio systemd**
 
-Es recomendable crear un usuario específico para ejecutar n8n en lugar de usar el usuario root:
+Hay dos opciones para configurar el servicio systemd para n8n: ejecutarlo como un usuario específico (recomendado para producción) o como root (más simple para pruebas).
+
+#### **Opción 1: Ejecutar n8n como un usuario específico (recomendado para producción)**
 
 ```bash
 # Crear un usuario específico para n8n
@@ -335,7 +337,7 @@ sudo mkdir -p /home/n8n_user/n8n
 sudo chown -R n8n_user:n8n_user /home/n8n_user/n8n
 ```
 
-Ahora, crea un archivo de servicio systemd para n8n:
+Crea un archivo de servicio systemd para n8n:
 
 ```bash
 sudo nano /etc/systemd/system/n8n.service
@@ -370,7 +372,81 @@ NoNewPrivileges=true
 WantedBy=multi-user.target
 ```
 
-> Nota: Si prefieres ejecutar n8n como root (no recomendado para producción), cambia "User=n8n_user" y "Group=n8n_user" por "User=root" y "Group=root", y ajusta "WorkingDirectory" a "/root".
+#### **Opción 2: Ejecutar n8n como root (más simple para pruebas)**
+
+Si n8n está instalado bajo el usuario root (por ejemplo, usando nvm), puede ser más sencillo ejecutarlo como root:
+
+```bash
+sudo nano /etc/systemd/system/n8n.service
+```
+
+Añade el siguiente contenido:
+
+```
+[Unit]
+Description=n8n workflow automation
+After=network.target mariadb.service
+Wants=mariadb.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root
+EnvironmentFile=/etc/n8n/env
+ExecStart=/usr/bin/n8n start
+Restart=always
+RestartSec=10
+KillMode=process
+SuccessExitStatus=0
+
+[Install]
+WantedBy=multi-user.target
+```
+
+#### **Opción 3: Ejecutar n8n con nvm (si usas Node Version Manager)**
+
+Si has instalado Node.js usando nvm, necesitas cargar nvm antes de ejecutar n8n:
+
+```bash
+sudo nano /etc/systemd/system/n8n.service
+```
+
+Añade el siguiente contenido:
+
+```
+[Unit]
+Description=n8n workflow automation
+After=network.target mariadb.service
+Wants=mariadb.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root
+EnvironmentFile=/etc/n8n/env
+ExecStart=/bin/bash -c 'export NVM_DIR="/root/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm use 16 && /usr/bin/n8n start'
+Restart=always
+RestartSec=10
+KillMode=process
+SuccessExitStatus=0
+
+[Install]
+WantedBy=multi-user.target
+```
+
+> **Importante**: Asegúrate de que el ejecutable de n8n esté correctamente enlazado en `/usr/bin/n8n`. Si no es así, deberás crear un enlace simbólico:
+> ```bash
+> # Buscar la ubicación real del ejecutable de n8n
+> find / -name n8n -type f -executable 2>/dev/null
+>
+> # Crear un enlace simbólico (ajusta la ruta según tu instalación)
+> ln -sf /ruta/al/ejecutable/n8n /usr/bin/n8n
+>
+> # Verificar que el enlace funcione
+> /usr/bin/n8n --version
+> ```
 
 ### **Configuración de firewall**
 
@@ -511,6 +587,8 @@ sudo systemctl restart n8n
 4. **n8n no inicia**:
    - Verifica los permisos del directorio de trabajo: `sudo chown -R n8n_user:n8n_user /home/n8n_user/n8n`
    - Comprueba que el archivo de entorno existe y tiene los permisos correctos: `sudo chmod 644 /etc/n8n/env`
+   - Verifica que el ejecutable de n8n esté correctamente enlazado: `ls -la /usr/bin/n8n`
+   - Si el enlace está "colgando", crea uno nuevo: `ln -sf /ruta/al/ejecutable/n8n /usr/bin/n8n`
 
 5. **Error de memoria durante la instalación**:
    - Aumenta la memoria disponible para Node.js: `NODE_OPTIONS=--max_old_space_size=4096 npm install n8n -g`
@@ -522,8 +600,65 @@ sudo systemctl restart n8n
    - Actualiza a Node.js 18 usando la compilación no oficial para CentOS 7
 
 7. **Conflictos con otros servicios**:
-   - Cambia el puerto de n8n en el archivo de entorno: `PORT=5679`
+   - Cambia el puerto de n8n en el archivo de entorno: `PORT=8080`
    - Configura un proxy inverso con Nginx o Apache para acceder a n8n a través de un subdominio
+
+8. **No se puede acceder a n8n desde el navegador**:
+   - Verifica que n8n esté escuchando en todas las interfaces: `netstat -tulpn | grep 5678`
+   - Comprueba que puedes acceder localmente: `curl http://localhost:5678/`
+   - Verifica si hay algún firewall activo: `systemctl status firewalld`
+   - Si el firewall está activo, abre el puerto: `firewall-cmd --permanent --add-port=5678/tcp && firewall-cmd --reload`
+
+#### **Verificar si un puerto está en uso**
+
+Antes de cambiar el puerto de n8n, es recomendable verificar si el nuevo puerto está disponible:
+
+```bash
+# Instalar herramientas de red si no están disponibles
+yum install -y net-tools
+
+# Verificar si el puerto 8080 está en uso
+netstat -tulpn | grep 8080
+```
+
+Si no hay salida, el puerto está libre. Si ves una salida como esta, el puerto está en uso:
+```
+tcp        0      0 0.0.0.0:8080            0.0.0.0:*               LISTEN      12345/proceso
+```
+
+Otros comandos útiles para verificar puertos:
+
+```bash
+# Usando ss (sustituto moderno de netstat)
+ss -tulpn | grep 8080
+
+# Usando lsof (necesita instalarse: yum install -y lsof)
+lsof -i :8080
+
+# Ver todos los puertos en uso
+netstat -tulpn
+
+# Identificar qué proceso está usando un puerto
+fuser 8080/tcp
+```
+
+Si el puerto está libre, puedes modificar la configuración de n8n:
+
+```bash
+# Editar el archivo de configuración
+nano /etc/n8n/env
+```
+
+Cambia la línea `PORT=5678` a `PORT=8080` y reinicia el servicio:
+
+```bash
+systemctl restart n8n
+```
+
+Después, n8n estará accesible a través de:
+```
+http://tu_ip_del_servidor:8080/
+```
 
 ## **✅ Comandos útiles (resumen)**
 
