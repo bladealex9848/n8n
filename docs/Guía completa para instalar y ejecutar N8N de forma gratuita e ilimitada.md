@@ -272,7 +272,135 @@ npm install n8n -g --ignore-scripts
 
 #### **Opción 6: Instalación con Docker (alternativa recomendada)**
 
-Si tienes Docker disponible en tu sistema, esta es la opción más sencilla y evita problemas de compatibilidad:
+Si tienes Docker disponible en tu sistema, esta es la opción más sencilla y evita problemas de compatibilidad. Hay varias formas de implementar n8n con Docker:
+
+##### **6.1 Instalación rápida con Docker y SQLite (más simple)**
+
+Esta es la forma más sencilla de ejecutar n8n con Docker, usando SQLite como base de datos:
+
+```bash
+# Crear un volumen para persistir los datos
+docker volume create n8n_data
+
+# Ejecutar n8n con Docker usando SQLite
+docker run -it --rm \
+  --name n8n \
+  -p 5678:5678 \
+  -v n8n_data:/home/node/.n8n \
+  docker.n8n.io/n8nio/n8n
+```
+
+##### **6.2 Instalación con Docker Compose y SQLite (recomendada)**
+
+Docker Compose facilita la gestión de la configuración y el despliegue de n8n. Hay varias configuraciones posibles según tus necesidades:
+
+###### **6.2.1 Configuración con dominio y HTTPS (recomendada para producción)**
+
+1. Crea un directorio para tu proyecto n8n:
+
+```bash
+mkdir -p ~/n8n-docker
+cd ~/n8n-docker
+```
+
+2. Crea un archivo `docker-compose.yml` con el siguiente contenido:
+
+```bash
+cat > docker-compose.yml << 'EOF'
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: always
+    ports:
+      - "0.0.0.0:5678:5678"
+    environment:
+      - DB_TYPE=sqlite
+      - N8N_LISTEN_ADDRESS=0.0.0.0
+      - N8N_SECURE_COOKIE=false  # Desactiva las cookies seguras para acceso HTTP
+      - N8N_CORS_ALLOW_ORIGIN=*
+      - N8N_PUSH_BACKEND=websocket
+      - N8N_HOST=tu_dominio_o_ip
+      - N8N_PORT=443
+      - N8N_PROTOCOL=https
+      - WEBHOOK_URL=https://tu_dominio_o_ip/
+      - N8N_TRUSTED_PROXIES=127.0.0.1/32,tu_ip_publica/32
+      - NODE_ENV=production
+      - N8N_ENCRYPTION_KEY=tu_clave_de_encriptacion_segura
+      - N8N_RUNNERS_ENABLED=true
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./local-files:/files
+
+volumes:
+  n8n_data:
+EOF
+```
+
+###### **6.2.2 Configuración con IP pública y HTTP (más simple)**
+
+Si prefieres acceder directamente a través de la IP pública sin HTTPS:
+
+```bash
+# Detener el contenedor actual si existe
+cd ~/n8n-docker
+docker compose down
+
+# Actualizar el archivo docker-compose.yml para usar la IP pública
+cat > docker-compose.yml << 'EOF'
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: always
+    ports:
+      - "0.0.0.0:5678:5678"
+    environment:
+      - DB_TYPE=sqlite
+      - N8N_LISTEN_ADDRESS=0.0.0.0
+      - N8N_SECURE_COOKIE=false
+      - N8N_HOST=tu_ip_publica
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://tu_ip_publica:5678/
+      - N8N_RUNNERS_ENABLED=true
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./local-files:/files
+
+volumes:
+  n8n_data:
+EOF
+```
+
+> **Nota**: Reemplaza `tu_ip_publica` con tu dirección IP pública real (por ejemplo, 190.8.178.74).
+
+3. Crea el directorio para archivos locales:
+
+```bash
+mkdir -p ~/n8n-docker/local-files
+```
+
+4. Inicia n8n con Docker Compose:
+
+```bash
+cd ~/n8n-docker
+docker compose up -d
+```
+
+5. Verifica que n8n está funcionando correctamente:
+
+```bash
+# Ver los logs del contenedor
+docker logs $(docker ps | grep n8n | awk '{print $1}')
+
+# Verificar que n8n está accesible
+curl -v http://tu_ip_publica:5678/
+```
+
+> **Importante**: Reemplaza `tu_dominio_o_ip`, `tu_ip_publica` y `tu_clave_de_encriptacion_segura` con tus valores reales. La clave de encriptación debe ser una cadena segura de al menos 32 caracteres.
+
+##### **6.3 Instalación con Docker y MariaDB**
+
+Si prefieres usar MariaDB como base de datos en lugar de SQLite:
 
 ```bash
 # Ejecutar n8n con Docker conectado a MariaDB
@@ -286,10 +414,10 @@ docker run -it --rm \
   -e DB_MYSQLDB_PORT=3306 \
   -e DB_MYSQLDB_USER=n8n_user \
   -e DB_MYSQLDB_PASSWORD=tu_contraseña_segura \
-  n8nio/n8n
+  docker.n8n.io/n8nio/n8n
 ```
 
-> Nota: Si usas Docker, es posible que necesites ajustar la configuración de red para que n8n pueda conectarse a tu base de datos MariaDB. En algunos casos, deberás usar la IP de tu host en lugar de `host.docker.internal`.
+> Nota: Si usas Docker con MariaDB, es posible que necesites ajustar la configuración de red para que n8n pueda conectarse a tu base de datos. En algunos casos, deberás usar la IP de tu host en lugar de `host.docker.internal`.
 
 ### **Configuración de variables de entorno para MariaDB**
 
@@ -489,6 +617,84 @@ http://tu_ip_del_servidor:5678
 
 Si ya tienes un servidor web como Apache o Nginx ejecutándose en tu VPS y quieres acceder a n8n a través de un subdominio, puedes configurar un proxy inverso.
 
+#### **Configuración de HTTPS para una dirección IP pública**
+
+Configurar HTTPS directamente para una dirección IP pública es posible, pero no es la práctica recomendada. Hay dos enfoques principales:
+
+##### **Opción 1: Usar un proxy inverso con SSL (recomendado)**
+
+La mejor manera de configurar HTTPS para n8n es usar un proxy inverso (Apache o Nginx) con un certificado SSL:
+
+1. **Obtener un certificado SSL para un dominio**: Los certificados SSL están vinculados a nombres de dominio, no a direcciones IP. Deberás registrar un dominio y configurarlo para que apunte a tu IP pública.
+
+2. **Configurar el proxy inverso**: Sigue las instrucciones de configuración de Apache o Nginx que se detallan más adelante en esta guía.
+
+##### **Opción 2: Usar Caddy como proxy inverso con SSL automático**
+
+Caddy es un servidor web moderno que puede obtener y renovar certificados SSL automáticamente:
+
+```bash
+# Crear un directorio para Caddy
+mkdir -p ~/caddy
+cd ~/caddy
+
+# Crear un archivo Caddyfile
+cat > Caddyfile << 'EOF'
+tu_dominio.com {
+    reverse_proxy localhost:5678
+}
+EOF
+
+# Ejecutar Caddy con Docker
+docker run -d \
+  --name caddy \
+  -p 80:80 -p 443:443 \
+  -v $PWD/Caddyfile:/etc/caddy/Caddyfile \
+  -v caddy_data:/data \
+  -v caddy_config:/config \
+  caddy
+```
+
+##### **Opción 3: Certificado autofirmado para la IP (no recomendado para producción)**
+
+Si necesitas HTTPS directamente en la IP pública sin un dominio, puedes usar un certificado autofirmado:
+
+```bash
+# Crear un directorio para los certificados
+mkdir -p ~/ssl
+cd ~/ssl
+
+# Generar un certificado autofirmado
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout server.key -out server.crt
+
+# Configurar Nginx con el certificado autofirmado
+cat > /etc/nginx/conf.d/n8n-ssl.conf << 'EOF'
+server {
+    listen 443 ssl;
+    server_name tu_ip_publica;
+
+    ssl_certificate /root/ssl/server.crt;
+    ssl_certificate_key /root/ssl/server.key;
+
+    location / {
+        proxy_pass http://localhost:5678;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+EOF
+
+# Reiniciar Nginx
+systemctl restart nginx
+```
+
+> **Nota**: Los navegadores mostrarán advertencias de seguridad con certificados autofirmados. Para entornos de producción, siempre es mejor usar un dominio con un certificado SSL válido.
+
 #### Para Nginx:
 
 ```bash
@@ -524,11 +730,13 @@ sudo systemctl restart nginx
 
 #### Para Apache:
 
+##### Configuración básica HTTP
+
 ```bash
 sudo nano /etc/httpd/conf.d/n8n.conf
 ```
 
-Añade la siguiente configuración:
+Añade la siguiente configuración para HTTP:
 
 ```
 <VirtualHost *:80>
@@ -543,6 +751,96 @@ Añade la siguiente configuración:
     RewriteCond %{HTTP:Connection} upgrade [NC]
     RewriteRule ^/?(.*) "ws://localhost:5678/$1" [P,L]
 </VirtualHost>
+```
+
+##### Configuración HTTPS con soporte para WebSockets y SSE
+
+Para una configuración más completa con HTTPS, WebSockets y Server-Sent Events (SSE):
+
+```bash
+sudo nano /etc/httpd/conf.d/n8n.conf
+```
+
+Añade la siguiente configuración:
+
+```
+<VirtualHost *:443>
+    ServerName n8n.tudominio.com
+    ServerAlias www.n8n.tudominio.com
+
+    # Configuración SSL
+    SSLEngine On
+    SSLCertificateFile /ruta/a/tu/certificado.crt
+    SSLCertificateKeyFile /ruta/a/tu/clave.key
+    SSLCertificateChainFile /ruta/a/tu/cadena.crt
+
+    # Configuración básica de proxy
+    ProxyPreserveHost On
+    ProxyPass / http://127.0.0.1:5678/
+    ProxyPassReverse / http://127.0.0.1:5678/
+
+    # Headers para el proxy
+    RequestHeader set X-Forwarded-Proto "https"
+    RequestHeader set X-Forwarded-Port "443"
+    RequestHeader set X-Forwarded-For %{REMOTE_ADDR}e
+
+    # Soporte para SSE (Server-Sent Events)
+    SetEnv proxy-nokeepalive 1
+    SetEnv proxy-initial-not-pooled 1
+    ProxyTimeout 600
+
+    # Soporte para WebSockets
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule /(.*) ws://127.0.0.1:5678/$1 [P,L]
+
+    # Logs
+    ErrorLog logs/n8n-error.log
+    CustomLog logs/n8n-access.log combined
+</VirtualHost>
+
+<VirtualHost *:80>
+    ServerName n8n.tudominio.com
+    ServerAlias www.n8n.tudominio.com
+
+    RewriteEngine On
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}$1 [R=301,L]
+</VirtualHost>
+```
+
+> **Nota**: Reemplaza `/ruta/a/tu/certificado.crt`, `/ruta/a/tu/clave.key` y `/ruta/a/tu/cadena.crt` con las rutas reales a tus archivos SSL. Si usas cPanel, estos archivos se gestionan automáticamente.
+
+##### Configuración alternativa con .htaccess
+
+Si no tienes acceso directo a la configuración de Apache, puedes usar un archivo `.htaccess` en el directorio `/public_html/n8n/`:
+
+```bash
+mkdir -p /public_html/n8n/
+cat > /public_html/n8n/.htaccess << 'EOF'
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Manejar la solicitud OPTIONS para CORS preflight
+    RewriteCond %{REQUEST_METHOD} OPTIONS
+    RewriteRule ^(.*)$ $1 [R=200,L]
+
+    # Redirigir todas las demás solicitudes al servidor n8n
+    RewriteRule ^(.*)$ http://127.0.0.1:5678/$1 [P,L]
+</IfModule>
+
+<IfModule mod_headers.c>
+    # Eliminar cualquier encabezado CORS existente para evitar duplicados
+    Header unset Access-Control-Allow-Origin
+    Header unset Access-Control-Allow-Methods
+    Header unset Access-Control-Allow-Headers
+
+    # Configurar los encabezados CORS correctamente
+    Header always set Access-Control-Allow-Origin "https://tudominio.com"
+    Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+    Header always set Access-Control-Allow-Credentials "true"
+</IfModule>
+EOF
 ```
 
 Reinicia Apache:
@@ -608,6 +906,21 @@ sudo systemctl restart n8n
    - Comprueba que puedes acceder localmente: `curl http://localhost:5678/`
    - Verifica si hay algún firewall activo: `systemctl status firewalld`
    - Si el firewall está activo, abre el puerto: `firewall-cmd --permanent --add-port=5678/tcp && firewall-cmd --reload`
+
+9. **Problemas específicos con Docker**:
+   - **Error "Connection reset by peer" al acceder a n8n**: Asegúrate de que el contenedor esté configurado para escuchar en todas las interfaces con `N8N_LISTEN_ADDRESS=0.0.0.0` y que los puertos estén correctamente mapeados con `"0.0.0.0:5678:5678"`.
+   - **Error al acceder a través de proxy inverso**: Verifica que la configuración de Apache o Nginx incluya soporte para WebSockets y/o SSE según la configuración de n8n.
+   - **Problemas de permisos en volúmenes**: Si ves errores relacionados con permisos, puedes ajustar los permisos del volumen: `docker run --rm -v n8n-docker_n8n_data:/data alpine chmod -R 777 /data`.
+   - **Contenedor se detiene inesperadamente**: Verifica los logs con `docker logs $(docker ps -a | grep n8n | awk '{print $1}')` para identificar el problema.
+   - **Problemas de red entre contenedores**: Si usas múltiples contenedores (por ejemplo, n8n y MariaDB), asegúrate de que estén en la misma red de Docker: `docker network create n8n-network` y luego usa `network: n8n-network` en tu docker-compose.yml.
+   - **Error de cookies seguras**: Si ves un mensaje como "Your n8n server is configured to use a secure cookie, however you are either visiting this via an insecure URL, or using Safari", tienes varias opciones:
+     * Configurar HTTPS (recomendado): Usa un proxy inverso con SSL como se describe en las secciones anteriores.
+     * Desactivar cookies seguras: Añade `N8N_SECURE_COOKIE=false` a las variables de entorno en tu docker-compose.yml:
+       ```yaml
+       environment:
+         - N8N_SECURE_COOKIE=false
+       ```
+     * Acceder usando `localhost` en lugar de la IP si estás en la misma máquina.
 
 #### **Verificar si un puerto está en uso**
 
@@ -681,10 +994,17 @@ http://tu_ip_del_servidor:8080/
 * Desinstalar n8n: **`npm uninstall n8n -g`**
 
 ### Comandos de Docker (alternativa)
-* Ejecutar n8n con Docker: **`docker run -it --rm --name n8n -p 5678:5678 -v ~/.n8n:/home/node/.n8n n8nio/n8n`**
-* Ejecutar n8n con Docker y MariaDB: **`docker run -it --rm --name n8n -p 5678:5678 -v ~/.n8n:/home/node/.n8n -e DB_TYPE=mysqldb -e DB_MYSQLDB_DATABASE=n8n_db -e DB_MYSQLDB_HOST=host.docker.internal -e DB_MYSQLDB_PORT=3306 -e DB_MYSQLDB_USER=n8n_user -e DB_MYSQLDB_PASSWORD=tu_contraseña_segura n8nio/n8n`**
+* Ejecutar n8n con Docker y SQLite: **`docker run -it --rm --name n8n -p 5678:5678 -v n8n_data:/home/node/.n8n docker.n8n.io/n8nio/n8n`**
+* Ejecutar n8n con Docker y MariaDB: **`docker run -it --rm --name n8n -p 5678:5678 -v ~/.n8n:/home/node/.n8n -e DB_TYPE=mysqldb -e DB_MYSQLDB_DATABASE=n8n_db -e DB_MYSQLDB_HOST=host.docker.internal -e DB_MYSQLDB_PORT=3306 -e DB_MYSQLDB_USER=n8n_user -e DB_MYSQLDB_PASSWORD=tu_contraseña_segura docker.n8n.io/n8nio/n8n`**
 * Ver logs de n8n en Docker: **`docker logs -f n8n`**
 * Detener contenedor de n8n: **`docker stop n8n`**
+
+### Comandos de Docker Compose (recomendado)
+* Iniciar n8n con Docker Compose: **`docker compose up -d`**
+* Detener n8n con Docker Compose: **`docker compose down`**
+* Ver logs de n8n con Docker Compose: **`docker logs $(docker ps | grep n8n | awk '{print $1}')`**
+* Actualizar n8n con Docker Compose: **`docker compose down && docker compose pull && docker compose up -d`**
+* Hacer copia de seguridad del volumen de datos: **`docker run --rm -v n8n-docker_n8n_data:/source -v /backup:/backup alpine tar -czf /backup/n8n-data-backup-$(date +%Y%m%d).tar.gz -C /source .`**
 
 ### Comandos de systemd
 * Recargar configuración de systemd: **`sudo systemctl daemon-reload`**
