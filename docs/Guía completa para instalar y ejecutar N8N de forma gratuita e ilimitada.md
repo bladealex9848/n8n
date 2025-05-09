@@ -272,135 +272,7 @@ npm install n8n -g --ignore-scripts
 
 #### **Opción 6: Instalación con Docker (alternativa recomendada)**
 
-Si tienes Docker disponible en tu sistema, esta es la opción más sencilla y evita problemas de compatibilidad. Hay varias formas de implementar n8n con Docker:
-
-##### **6.1 Instalación rápida con Docker y SQLite (más simple)**
-
-Esta es la forma más sencilla de ejecutar n8n con Docker, usando SQLite como base de datos:
-
-```bash
-# Crear un volumen para persistir los datos
-docker volume create n8n_data
-
-# Ejecutar n8n con Docker usando SQLite
-docker run -it --rm \
-  --name n8n \
-  -p 5678:5678 \
-  -v n8n_data:/home/node/.n8n \
-  docker.n8n.io/n8nio/n8n
-```
-
-##### **6.2 Instalación con Docker Compose y SQLite (recomendada)**
-
-Docker Compose facilita la gestión de la configuración y el despliegue de n8n. Hay varias configuraciones posibles según tus necesidades:
-
-###### **6.2.1 Configuración con dominio y HTTPS (recomendada para producción)**
-
-1. Crea un directorio para tu proyecto n8n:
-
-```bash
-mkdir -p ~/n8n-docker
-cd ~/n8n-docker
-```
-
-2. Crea un archivo `docker-compose.yml` con el siguiente contenido:
-
-```bash
-cat > docker-compose.yml << 'EOF'
-services:
-  n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
-    restart: always
-    ports:
-      - "0.0.0.0:5678:5678"
-    environment:
-      - DB_TYPE=sqlite
-      - N8N_LISTEN_ADDRESS=0.0.0.0
-      - N8N_SECURE_COOKIE=false  # Desactiva las cookies seguras para acceso HTTP
-      - N8N_CORS_ALLOW_ORIGIN=*
-      - N8N_PUSH_BACKEND=websocket
-      - N8N_HOST=tu_dominio_o_ip
-      - N8N_PORT=443
-      - N8N_PROTOCOL=https
-      - WEBHOOK_URL=https://tu_dominio_o_ip/
-      - N8N_TRUSTED_PROXIES=127.0.0.1/32,tu_ip_publica/32
-      - NODE_ENV=production
-      - N8N_ENCRYPTION_KEY=tu_clave_de_encriptacion_segura
-      - N8N_RUNNERS_ENABLED=true
-    volumes:
-      - n8n_data:/home/node/.n8n
-      - ./local-files:/files
-
-volumes:
-  n8n_data:
-EOF
-```
-
-###### **6.2.2 Configuración con IP pública y HTTP (más simple)**
-
-Si prefieres acceder directamente a través de la IP pública sin HTTPS:
-
-```bash
-# Detener el contenedor actual si existe
-cd ~/n8n-docker
-docker compose down
-
-# Actualizar el archivo docker-compose.yml para usar la IP pública
-cat > docker-compose.yml << 'EOF'
-services:
-  n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
-    restart: always
-    ports:
-      - "0.0.0.0:5678:5678"
-    environment:
-      - DB_TYPE=sqlite
-      - N8N_LISTEN_ADDRESS=0.0.0.0
-      - N8N_SECURE_COOKIE=false
-      - N8N_HOST=tu_ip_publica
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - WEBHOOK_URL=http://tu_ip_publica:5678/
-      - N8N_RUNNERS_ENABLED=true
-    volumes:
-      - n8n_data:/home/node/.n8n
-      - ./local-files:/files
-
-volumes:
-  n8n_data:
-EOF
-```
-
-> **Nota**: Reemplaza `tu_ip_publica` con tu dirección IP pública real (por ejemplo, 190.8.178.74).
-
-3. Crea el directorio para archivos locales:
-
-```bash
-mkdir -p ~/n8n-docker/local-files
-```
-
-4. Inicia n8n con Docker Compose:
-
-```bash
-cd ~/n8n-docker
-docker compose up -d
-```
-
-5. Verifica que n8n está funcionando correctamente:
-
-```bash
-# Ver los logs del contenedor
-docker logs $(docker ps | grep n8n | awk '{print $1}')
-
-# Verificar que n8n está accesible
-curl -v http://tu_ip_publica:5678/
-```
-
-> **Importante**: Reemplaza `tu_dominio_o_ip`, `tu_ip_publica` y `tu_clave_de_encriptacion_segura` con tus valores reales. La clave de encriptación debe ser una cadena segura de al menos 32 caracteres.
-
-##### **6.3 Instalación con Docker y MariaDB**
-
-Si prefieres usar MariaDB como base de datos en lugar de SQLite:
+Si tienes Docker disponible en tu sistema, esta es la opción más sencilla y evita problemas de compatibilidad:
 
 ```bash
 # Ejecutar n8n con Docker conectado a MariaDB
@@ -414,10 +286,10 @@ docker run -it --rm \
   -e DB_MYSQLDB_PORT=3306 \
   -e DB_MYSQLDB_USER=n8n_user \
   -e DB_MYSQLDB_PASSWORD=tu_contraseña_segura \
-  docker.n8n.io/n8nio/n8n
+  n8nio/n8n
 ```
 
-> Nota: Si usas Docker con MariaDB, es posible que necesites ajustar la configuración de red para que n8n pueda conectarse a tu base de datos. En algunos casos, deberás usar la IP de tu host en lugar de `host.docker.internal`.
+> Nota: Si usas Docker, es posible que necesites ajustar la configuración de red para que n8n pueda conectarse a tu base de datos MariaDB. En algunos casos, deberás usar la IP de tu host en lugar de `host.docker.internal`.
 
 ### **Configuración de variables de entorno para MariaDB**
 
@@ -994,17 +866,10 @@ http://tu_ip_del_servidor:8080/
 * Desinstalar n8n: **`npm uninstall n8n -g`**
 
 ### Comandos de Docker (alternativa)
-* Ejecutar n8n con Docker y SQLite: **`docker run -it --rm --name n8n -p 5678:5678 -v n8n_data:/home/node/.n8n docker.n8n.io/n8nio/n8n`**
-* Ejecutar n8n con Docker y MariaDB: **`docker run -it --rm --name n8n -p 5678:5678 -v ~/.n8n:/home/node/.n8n -e DB_TYPE=mysqldb -e DB_MYSQLDB_DATABASE=n8n_db -e DB_MYSQLDB_HOST=host.docker.internal -e DB_MYSQLDB_PORT=3306 -e DB_MYSQLDB_USER=n8n_user -e DB_MYSQLDB_PASSWORD=tu_contraseña_segura docker.n8n.io/n8nio/n8n`**
+* Ejecutar n8n con Docker: **`docker run -it --rm --name n8n -p 5678:5678 -v ~/.n8n:/home/node/.n8n n8nio/n8n`**
+* Ejecutar n8n con Docker y MariaDB: **`docker run -it --rm --name n8n -p 5678:5678 -v ~/.n8n:/home/node/.n8n -e DB_TYPE=mysqldb -e DB_MYSQLDB_DATABASE=n8n_db -e DB_MYSQLDB_HOST=host.docker.internal -e DB_MYSQLDB_PORT=3306 -e DB_MYSQLDB_USER=n8n_user -e DB_MYSQLDB_PASSWORD=tu_contraseña_segura n8nio/n8n`**
 * Ver logs de n8n en Docker: **`docker logs -f n8n`**
 * Detener contenedor de n8n: **`docker stop n8n`**
-
-### Comandos de Docker Compose (recomendado)
-* Iniciar n8n con Docker Compose: **`docker compose up -d`**
-* Detener n8n con Docker Compose: **`docker compose down`**
-* Ver logs de n8n con Docker Compose: **`docker logs $(docker ps | grep n8n | awk '{print $1}')`**
-* Actualizar n8n con Docker Compose: **`docker compose down && docker compose pull && docker compose up -d`**
-* Hacer copia de seguridad del volumen de datos: **`docker run --rm -v n8n-docker_n8n_data:/source -v /backup:/backup alpine tar -czf /backup/n8n-data-backup-$(date +%Y%m%d).tar.gz -C /source .`**
 
 ### Comandos de systemd
 * Recargar configuración de systemd: **`sudo systemctl daemon-reload`**
@@ -1032,6 +897,102 @@ http://tu_ip_del_servidor:8080/
 * Liberar caché de memoria: **`sudo sync && sudo echo 3 > /proc/sys/vm/drop_caches`**
 * Ver uso de memoria: **`free -h`**
 * Ver procesos por uso de memoria: **`ps aux --sort=-%mem | head -10`**
+
+## **🐳 Ventajas de usar contenedores Docker para n8n**
+
+La instalación de n8n mediante contenedores Docker ofrece numerosas ventajas, especialmente en sistemas como CentOS 7:
+
+### **Aislamiento y consistencia**
+- **Entorno aislado**: Los contenedores proporcionan un entorno aislado que no interfiere con el sistema host.
+- **Consistencia**: El mismo contenedor funcionará de manera idéntica en cualquier entorno que soporte Docker.
+- **Reproducibilidad**: Facilita la recreación exacta del entorno de ejecución.
+
+### **Gestión de dependencias**
+- **Resolución de problemas de compatibilidad**: Evita conflictos con las dependencias del sistema.
+- **Independencia de glibc**: Supera las limitaciones de glibc 2.17 en CentOS 7, que puede causar problemas con Node.js 18+.
+- **Paquetes preinstalados**: La imagen de Docker de n8n ya incluye todas las dependencias necesarias.
+
+### **Facilidad de instalación y actualización**
+- **Instalación simplificada**: Un solo comando para instalar n8n con todas sus dependencias.
+- **Actualizaciones sencillas**: Actualizar n8n es tan simple como descargar la nueva imagen y reiniciar el contenedor.
+- **Rollback sencillo**: Fácil retorno a versiones anteriores si hay problemas.
+
+### **Gestión de recursos**
+- **Control de recursos**: Posibilidad de limitar CPU y memoria asignados a n8n.
+- **Escalabilidad**: Facilita la implementación de múltiples instancias para escalar horizontalmente.
+
+### **Seguridad**
+- **Menor superficie de ataque**: El contenedor limita el acceso al sistema host.
+- **Aislamiento de procesos**: Los procesos dentro del contenedor están aislados del sistema host.
+- **Ejecución sin privilegios**: Posibilidad de ejecutar como usuario no root.
+
+### **Persistencia de datos**
+- **Volúmenes de datos**: Permite mantener los datos persistentes entre reinicios del contenedor.
+- **Respaldos simplificados**: Facilita la creación de copias de seguridad de los datos.
+
+## **🔒 Solución de problemas con cookies seguras**
+
+Si al acceder a n8n ves un mensaje de error sobre cookies seguras, tienes varias opciones:
+
+### **Opción 1: Desactivar las cookies seguras (solución rápida)**
+
+Esta es la solución más rápida, aunque menos segura:
+
+```bash
+# Detener el contenedor actual si está en ejecución
+docker stop n8n
+docker rm n8n
+
+# Ejecutar n8n con cookies seguras desactivadas
+docker run -d --name n8n \
+  -p 5678:5678 \
+  -e GENERIC_TIMEZONE=America/Bogota \
+  -e N8N_ENCRYPTION_KEY=tu_clave_de_encriptacion_segura \
+  -e NODE_ENV=production \
+  -e DB_TYPE=sqlite \
+  -e N8N_SECURE_COOKIE=false \
+  -v n8n_data:/home/node/.n8n \
+  --restart always \
+  docker.n8n.io/n8nio/n8n
+```
+
+Si estás usando Docker Compose, añade `N8N_SECURE_COOKIE=false` a las variables de entorno en tu archivo `docker-compose.yml` y reinicia los contenedores con `docker-compose up -d`.
+
+### **Opción 2: Configurar HTTPS con un proxy inverso (recomendado para producción)**
+
+Para entornos de producción, es recomendable configurar HTTPS. Puedes usar Nginx, Apache o Caddy como proxy inverso.
+
+#### **Ejemplo con Caddy (muy sencillo)**
+
+```bash
+# Instalar Caddy
+sudo yum install -y yum-plugin-copr
+sudo yum copr enable @caddy/caddy
+sudo yum install -y caddy
+
+# Configurar Caddy
+sudo tee /etc/caddy/Caddyfile > /dev/null << EOF
+n8n.tudominio.com {
+    reverse_proxy localhost:5678
+}
+EOF
+
+# Iniciar Caddy
+sudo systemctl enable caddy
+sudo systemctl start caddy
+```
+
+#### **Ejemplo con Nginx**
+
+Consulta la sección "Configuración de un proxy inverso" más arriba en esta guía.
+
+### **Opción 3: Acceder a través de localhost**
+
+Si estás accediendo a n8n desde el mismo servidor, puedes usar `localhost` en lugar de la dirección IP:
+
+```
+http://localhost:5678
+```
 
 ## **🔗 Enlaces útiles**
 
